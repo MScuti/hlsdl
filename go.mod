@@ -1,4 +1,4 @@
-module github.com/canhlinh/hlsdl
+module github.com/MScuti/hlsdl
 
 require (
 	github.com/fatih/color v1.18.0 // indirect
