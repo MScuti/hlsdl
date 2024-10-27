@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/canhlinh/hlsdl"
+	"github.com/MScuti/hlsdl"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +19,7 @@ func main() {
 	cmd.Flags().StringP("url", "u", "", "The manifest (m3u8) url")
 	cmd.Flags().StringArrayP("headers", "H", []string{}, "The extra headers for m3u8 url")
 	cmd.Flags().StringP("output", "o", "", "Output file name")
+	cmd.Flags().StringP("proxy", "p", "", "http proxy url")
 	cmd.Flags().StringP("dir", "d", "./download", "The directory where the file will be stored")
 	cmd.Flags().BoolP("record", "r", false, "Indicate whether the m3u8 is a live stream video and you want to record it")
 	cmd.Flags().IntP("workers", "w", 2, "Number of workers to execute concurrent operations")
@@ -55,6 +56,10 @@ func cmdF(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	proxy, err := command.Flags().GetString("proxy")
+	if err != nil {
+		return err
+	}
 	workers, err := command.Flags().GetInt("workers")
 	if err != nil {
 		return err
@@ -64,11 +69,11 @@ func cmdF(command *cobra.Command, args []string) error {
 	} else if record {
 		return recordLiveStream(m3u8URL, headers, dir, output)
 	}
-	return downloadVodMovie(m3u8URL, headers, dir, output, workers)
+	return downloadVodMovie(m3u8URL, headers, dir, output, proxy, workers)
 }
 
-func downloadVodMovie(url string, headers map[string]string, dir string, fileName string, workers int) error {
-	hlsDL := hlsdl.New(url, headers, dir, fileName, workers, true)
+func downloadVodMovie(url string, headers map[string]string, dir string, fileName, proxy string, workers int) error {
+	hlsDL := hlsdl.New(url, headers, dir, fileName, proxy, workers, true)
 	filepath, err := hlsDL.Download()
 	if err != nil {
 		return err
