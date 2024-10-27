@@ -49,14 +49,21 @@ type DownloadResult struct {
 	SeqId uint64
 }
 
-func New(hlsURL string, headers map[string]string, dir, filename string, workers int, enableBar bool) *HlsDl {
+func New(hlsURL string, headers map[string]string, dir, filename, proxy string, workers int, enableBar bool) *HlsDl {
 	if filename == "" {
 		filename = getFilename()
 	}
+	var client *resty.Client
+	if proxy != "" {
+		client = resty.New().SetProxy(proxy)
+	} else {
+		client = resty.New()
+	}
+
 	hlsdl := &HlsDl{
 		hlsURL:    hlsURL,
 		dir:       dir,
-		client:    resty.New(),
+		client:    client,
 		workers:   workers,
 		enableBar: enableBar,
 		headers:   headers,
