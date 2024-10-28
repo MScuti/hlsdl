@@ -1,15 +1,18 @@
 package hlsdl
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,6 +40,7 @@ type HlsDl struct {
 	startTime  int64
 	segTotal   int64
 	segCurrent int64
+	proxy      string
 }
 
 type Segment struct {
@@ -68,6 +72,7 @@ func New(hlsURL string, headers map[string]string, dir, filename, proxy string, 
 		headers:   headers,
 		filename:  filename,
 		startTime: time.Now().UnixMilli(),
+		proxy:     proxy,
 	}
 
 	return hlsdl
@@ -91,28 +96,58 @@ func closeq(v interface{}) {
 }
 
 func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
-	hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second)
-	resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).SetDoNotParseResponse(true).Get(segment.URI)
-	defer resp.RawBody().Close()
+	req, err := http.NewRequest("GET", segment.URI, nil)
+	if err != nil {
+		return err
+	}
 
+	// set headers
+	for k, v := range hlsDl.headers {
+		req.Header.Set(k, v)
+	}
+
+	// init client
+	client := &http.Client{}
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	if hlsDl.proxy != "" {
+		proxyURL, err := url.Parse(hlsDl.proxy)
+		if err != nil {
+			return err
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
+	}
+	client.Transport = transport
+
+	// do request
+	rep, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	if rep.StatusCode != http.StatusOK {
+		return errors.New(strconv.Itoa(rep.StatusCode))
+	}
+
+	// create local file
 	outFile, err := os.Create(segment.Path)
 	if err != nil {
 		return err
 	}
 	defer closeq(outFile)
 
-	data, err := io.ReadAll(resp.RawBody())
+	// read data
+	data, err := io.ReadAll(rep.Body)
 	if err != nil {
 		return err
 	}
+	defer rep.Body.Close()
+
 	_, err = outFile.Write(data)
 	if err != nil {
 		return err
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return errors.New(resp.Status())
-	}
 	return nil
 }
 
