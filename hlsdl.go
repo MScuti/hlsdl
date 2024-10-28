@@ -53,7 +53,7 @@ func New(hlsURL string, headers map[string]string, dir, filename, proxy string, 
 	if filename == "" {
 		filename = getFilename()
 	}
-	client := resty.New().SetTimeout(30 * time.Minute).SetRetryCount(3).SetDebug(true)
+	client := resty.New().SetTimeout(30 * time.Minute).SetRetryCount(3)
 
 	if proxy != "" {
 		client.SetProxy(proxy)
