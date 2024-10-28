@@ -1,7 +1,6 @@
 package hlsdl
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -54,15 +53,7 @@ func New(hlsURL string, headers map[string]string, dir, filename, proxy string, 
 	if filename == "" {
 		filename = getFilename()
 	}
-	var client = resty.New()
-	client.SetTimeout(15 * time.Second)
-	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-	client.SetTransport(&http.Transport{
-		MaxIdleConns:      10,
-		IdleConnTimeout:   30 * time.Second,
-		DisableKeepAlives: true, // 禁用 Keep-Alive
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-	})
+	client := resty.New().SetTimeout(30 * time.Minute).SetRetryCount(3).SetDebug(true)
 
 	if proxy != "" {
 		client.SetProxy(proxy)
