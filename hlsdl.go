@@ -92,23 +92,24 @@ func closeq(v interface{}) {
 
 func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 	hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second)
-	resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).Get(segment.URI)
+	resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).SetDoNotParseResponse(true).Get(segment.URI)
+	defer resp.RawBody().Close()
 
 	outFile, err := os.Create(segment.Path)
 	if err != nil {
 		return err
 	}
 	defer closeq(outFile)
-	data, err := io.ReadAll(resp.RawResponse.Body)
+
+	data, err := io.ReadAll(resp.RawBody())
 	if err != nil {
 		return err
 	}
 	_, err = outFile.Write(data)
-	defer closeq(resp.RawResponse.Body)
-
 	if err != nil {
 		return err
 	}
+
 	if resp.StatusCode() != http.StatusOK {
 		return errors.New(resp.Status())
 	}
