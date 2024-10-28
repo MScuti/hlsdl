@@ -121,8 +121,14 @@ func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 			return nil
 		}
 		if errors.Is(err, io.EOF) {
+			log.Printf("Download segment %d failed, %d retrying\n", segment.SeqId, i+1)
 			continue
 		}
+		if err.Error() == "unexpected EOF" {
+			log.Printf("Download segment %d failed, %d retrying\n", segment.SeqId, i+1)
+			continue
+		}
+
 		return err
 	}
 	return nil
