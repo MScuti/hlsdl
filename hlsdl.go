@@ -82,9 +82,30 @@ func wait(wg *sync.WaitGroup) chan bool {
 	return c
 }
 
+func silently(_ ...interface{}) {}
+
+func closeq(v interface{}) {
+	if c, ok := v.(io.Closer); ok {
+		silently(c.Close())
+	}
+}
+
 func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 	hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second)
 	resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).SetOutput(segment.Path).Get(segment.URI)
+
+	outFile, err := os.Create(segment.Path)
+	if err != nil {
+		return err
+	}
+	defer closeq(outFile)
+	data, err := io.ReadAll(resp.RawResponse.Body)
+	if err != nil {
+		return err
+	}
+	_, err = outFile.Write(data)
+	defer closeq(resp.RawResponse.Body)
+
 	if err != nil {
 		return err
 	}
