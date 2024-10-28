@@ -1,18 +1,15 @@
 package hlsdl
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -96,82 +93,38 @@ func closeq(v interface{}) {
 }
 
 func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
-	req, err := http.NewRequest("GET", segment.URI, nil)
-	if err != nil {
-		return err
-	}
-
-	// set headers
-	for k, v := range hlsDl.headers {
-		req.Header.Set(k, v)
-	}
-
-	// init client
-	client := &http.Client{}
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	if hlsDl.proxy != "" {
-		proxyURL, err := url.Parse(hlsDl.proxy)
+	for i := 0; i < 5; i++ {
+		hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second)
+		resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).SetDoNotParseResponse(true).Get(segment.URI)
 		if err != nil {
 			return err
 		}
-		transport.Proxy = http.ProxyURL(proxyURL)
-	}
-	client.Transport = transport
+		defer resp.RawBody().Close()
+		data, err := io.ReadAll(resp.RawBody())
+		if err == nil {
+			if resp.StatusCode() != http.StatusOK {
+				continue
+			}
 
-	var resp *http.Response
-	var readErr error
-	var data []byte
-	const maxRetries = 5
+			// create local file
+			outFile, err := os.Create(segment.Path)
+			if err != nil {
+				return err
+			}
+			defer closeq(outFile)
 
-	for i := 0; i < maxRetries; i++ {
-		// do request
-		resp, err = client.Do(req)
-		if err != nil {
-			return err
+			// write file
+			_, err = outFile.Write(data)
+			if err != nil {
+				return err
+			}
+			return nil
 		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return errors.New(strconv.Itoa(resp.StatusCode))
-		}
-
-		// Attempt to read data
-		data, readErr = io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		// If read was successful, proceed
-		if readErr == nil {
-			break
-		}
-
-		// If EOF error or temporary network issue, retry
-		if errors.Is(readErr, io.EOF) {
-			log.Printf("Error reading segment %d: %v. Retrying... (%d/%d)\n", segment.SeqId, readErr, i+1, maxRetries)
-			time.Sleep(time.Second)
+		if errors.Is(err, io.EOF) {
 			continue
 		}
-
 		return err
 	}
-
-	if readErr != nil {
-		return readErr
-	}
-
-	// create local file
-	outFile, err := os.Create(segment.Path)
-	if err != nil {
-		return err
-	}
-	defer closeq(outFile)
-
-	// write file
-	_, err = outFile.Write(data)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
