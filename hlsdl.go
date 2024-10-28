@@ -120,13 +120,43 @@ func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 	}
 	client.Transport = transport
 
-	// do request
-	rep, err := client.Do(req)
-	if err != nil {
+	var resp *http.Response
+	var readErr error
+	var data []byte
+	const maxRetries = 5
+
+	for i := 0; i < maxRetries; i++ {
+		// do request
+		resp, err = client.Do(req)
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return errors.New(strconv.Itoa(resp.StatusCode))
+		}
+
+		// Attempt to read data
+		data, readErr = io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		// If read was successful, proceed
+		if readErr == nil {
+			break
+		}
+
+		// If EOF error or temporary network issue, retry
+		if errors.Is(readErr, io.EOF) {
+			log.Printf("Error reading segment %d: %v. Retrying... (%d/%d)\n", segment.SeqId, readErr, i+1, maxRetries)
+			time.Sleep(time.Second)
+			continue
+		}
+
 		return err
 	}
-	if rep.StatusCode != http.StatusOK {
-		return errors.New(strconv.Itoa(rep.StatusCode))
+
+	if readErr != nil {
+		return readErr
 	}
 
 	// create local file
@@ -136,13 +166,7 @@ func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 	}
 	defer closeq(outFile)
 
-	// read data
-	data, err := io.ReadAll(rep.Body)
-	if err != nil {
-		return err
-	}
-	defer rep.Body.Close()
-
+	// write file
 	_, err = outFile.Write(data)
 	if err != nil {
 		return err
