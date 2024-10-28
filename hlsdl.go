@@ -92,7 +92,7 @@ func closeq(v interface{}) {
 
 func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 	hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second)
-	resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).SetOutput(segment.Path).Get(segment.URI)
+	resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).Get(segment.URI)
 
 	outFile, err := os.Create(segment.Path)
 	if err != nil {
