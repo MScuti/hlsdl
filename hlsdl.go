@@ -234,9 +234,11 @@ func (hlsDl *HlsDl) join(segmentsDir string, segments []*Segment) (string, error
 
 	defer os.RemoveAll(segmentsDir)
 	for _, segment := range segments {
-		d, err := hlsDl.decrypt(segment, key, iv)
+		var d []byte
+		var err error
+		d, err = hlsDl.decrypt(segment, key, iv)
 		if err != nil {
-			return "", err
+			d, err = hlsDl.decryptWithKey(segment)
 		}
 		if _, err := f.Write(d); err != nil {
 			return "", err
@@ -297,37 +299,37 @@ func (hlsDl *HlsDl) decrypt(segment *Segment, key, iv []byte) ([]byte, error) {
 	return data, nil
 }
 
-//// Decrypt descryps a segment
-//func (hlsDl *HlsDl) decrypt(segment *Segment) ([]byte, error) {
-//	file, err := os.Open(segment.Path)
-//	if err != nil {
-//		return nil, err
-//	}
-//	defer file.Close()
-//	data, err := io.ReadAll(file)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if segment.Key != nil {
-//		key, iv, err := hlsDl.getKey(segment)
-//		if err != nil {
-//			return nil, err
-//		}
-//		data, err = decryptAES128(data, key, iv)
-//		if err != nil {
-//			return nil, err
-//		}
-//	}
-//
-//	for j := 0; j < len(data); j++ {
-//		if data[j] == syncByte {
-//			data = data[j:]
-//			break
-//		}
-//	}
-//
-//	return data, nil
-//}
+// Decrypt descryps a segment
+func (hlsDl *HlsDl) decryptWithKey(segment *Segment) ([]byte, error) {
+	file, err := os.Open(segment.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	if segment.Key != nil {
+		key, iv, err := hlsDl.getKey(segment)
+		if err != nil {
+			return nil, err
+		}
+		data, err = decryptAES128(data, key, iv)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for j := 0; j < len(data); j++ {
+		if data[j] == syncByte {
+			data = data[j:]
+			break
+		}
+	}
+
+	return data, nil
+}
 
 func (hlsDl *HlsDl) getKey(segment *Segment) (key []byte, iv []byte, err error) {
 	for i := 0; i < 10; i++ {
@@ -348,6 +350,7 @@ func (hlsDl *HlsDl) getKey(segment *Segment) (key []byte, iv []byte, err error) 
 	}
 	return nil, nil, errors.New("Failed to get descryption key")
 }
+
 func (hlsDl *HlsDl) GetProgress() float64 {
 	var current int64
 	if hlsDl.enableBar {
