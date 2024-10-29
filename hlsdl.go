@@ -103,6 +103,7 @@ func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 		data, err := io.ReadAll(resp.RawBody())
 		if err == nil {
 			if resp.StatusCode() != http.StatusOK {
+				time.Sleep(time.Second)
 				continue
 			}
 
@@ -122,13 +123,14 @@ func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
 		}
 		if errors.Is(err, io.EOF) {
 			log.Printf("Download segment %d failed, %d retrying\n", segment.SeqId, i+1)
+			time.Sleep(time.Second)
 			continue
 		}
 		if err.Error() == "unexpected EOF" {
 			log.Printf("Download segment %d failed, %d retrying\n", segment.SeqId, i+1)
+			time.Sleep(time.Second)
 			continue
 		}
-
 		return err
 	}
 	return nil
