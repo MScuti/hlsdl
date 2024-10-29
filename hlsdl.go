@@ -237,10 +237,11 @@ func (hlsDl *HlsDl) join(segmentsDir string, segments []*Segment) (string, error
 		var d []byte
 		var err error
 		d, err = hlsDl.decrypt(segment, key, iv)
-		if err.Error() == "crypto/cipher: input not full blocks" {
-			return "", err
+		if err != nil {
+			if err.Error() == "crypto/cipher: input not full blocks" {
+				return "", err
+			}
 		}
-
 		if err != nil {
 			d, err = hlsDl.decryptWithKey(segment)
 		}
