@@ -237,6 +237,10 @@ func (hlsDl *HlsDl) join(segmentsDir string, segments []*Segment) (string, error
 		var d []byte
 		var err error
 		d, err = hlsDl.decrypt(segment, key, iv)
+		if err.Error() == "crypto/cipher: input not full blocks" {
+			return "", err
+		}
+
 		if err != nil {
 			d, err = hlsDl.decryptWithKey(segment)
 		}
@@ -273,19 +277,37 @@ func (hlsDl *HlsDl) Download() (string, error) {
 
 // Decrypt descryps a segment
 func (hlsDl *HlsDl) decrypt(segment *Segment, key, iv []byte) ([]byte, error) {
+	// 捕获潜在的 panic 并将其转化为错误
+	var err error
+	var data []byte // 提前声明 data 为 nil，以便在发生 panic 时可以安全返回
+
+	defer func() {
+		if r := recover(); r != nil {
+			// 将 panic 的内容转化为字符串，检查是否包含目标信息
+			if panicErr, ok := r.(string); ok && panicErr == "crypto/cipher: input not full blocks" {
+				err = fmt.Errorf(panicErr)
+			} else {
+				err = fmt.Errorf("unexpected panic during AES decryption: %v", r)
+			}
+		}
+	}()
+
 	file, err := os.Open(segment.Path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	data, err := io.ReadAll(file)
+
+	data, err = io.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}
+
 	if segment.Key != nil {
+		// 调用可能会导致 panic 的解密函数
 		data, err = decryptAES128(data, key, iv)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decrypt AES128 segment data: %w", err)
 		}
 	}
 
@@ -296,7 +318,7 @@ func (hlsDl *HlsDl) decrypt(segment *Segment, key, iv []byte) ([]byte, error) {
 		}
 	}
 
-	return data, nil
+	return data, err
 }
 
 // Decrypt descryps a segment
