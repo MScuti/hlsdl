@@ -93,8 +93,8 @@ func closeq(v interface{}) {
 }
 
 func (hlsDl *HlsDl) downloadSegment(segment *Segment) error {
-	for i := 0; i < 10; i++ {
-		hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second)
+	for i := 0; i < 30; i++ {
+		hlsDl.client.SetRetryCount(5).SetRetryWaitTime(time.Second * 2)
 		resp, err := hlsDl.client.R().SetHeaders(hlsDl.headers).SetDoNotParseResponse(true).Get(segment.URI)
 		if err != nil {
 			return err
