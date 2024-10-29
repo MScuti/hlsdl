@@ -330,19 +330,23 @@ func (hlsDl *HlsDl) decrypt(segment *Segment, key, iv []byte) ([]byte, error) {
 //}
 
 func (hlsDl *HlsDl) getKey(segment *Segment) (key []byte, iv []byte, err error) {
-	res, err := hlsDl.client.SetHeaders(hlsDl.headers).R().Get(segment.Key.URI)
-	if err != nil {
-		return nil, nil, err
+	for i := 0; i < 10; i++ {
+		res, err := hlsDl.client.SetHeaders(hlsDl.headers).R().Get(segment.Key.URI)
+		if err != nil {
+			continue
+		}
+		if res.StatusCode() != 200 {
+			continue
+			return nil, nil, errors.New("Failed to get descryption key")
+		}
+		key = res.Body()
+		iv = []byte(segment.Key.IV)
+		if len(iv) == 0 {
+			iv = defaultIV(segment.SeqId)
+		}
+		return key, iv, nil
 	}
-	if res.StatusCode() != 200 {
-		return nil, nil, errors.New("Failed to get descryption key")
-	}
-	key = res.Body()
-	iv = []byte(segment.Key.IV)
-	if len(iv) == 0 {
-		iv = defaultIV(segment.SeqId)
-	}
-	return
+	return nil, nil, errors.New("Failed to get descryption key")
 }
 func (hlsDl *HlsDl) GetProgress() float64 {
 	var current int64

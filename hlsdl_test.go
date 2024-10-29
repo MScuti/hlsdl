@@ -20,7 +20,7 @@ func TestDescrypt(t *testing.T) {
 	}
 	defer os.Remove(seg.Path)
 
-	if _, err := hlsDl.decrypt(seg); err != nil {
+	if _, err := hlsDl.decrypt(seg, []byte{}, []byte{}); err != nil {
 		t.Fatal(err)
 	}
 }
