@@ -239,12 +239,12 @@ func (hlsDl *HlsDl) join(segmentsDir string, segments []*Segment) (string, error
 	}
 
 	// 通道用于接收解密后的数据
-	results := make(chan result, len(segments))
+	results := make(chan result, 3)
 	var wg sync.WaitGroup
 
 	// 异步解密
+	wg.Add(len(segments))
 	for i, segment := range segments {
-		wg.Add(1)
 		go func(i int, seg *Segment) {
 			defer wg.Done()
 			d, err := hlsDl.decrypt(seg)
