@@ -1,7 +1,6 @@
 package hlsdl
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -227,93 +226,28 @@ func (hlsDl *HlsDl) join(segmentsDir string, segments []*Segment) (string, error
 		return segments[i].SeqId < segments[j].SeqId
 	})
 
+	// 仅仅获取一次Key即可
+	key, iv, err := hlsDl.getKey(segments[0])
+	if err != nil {
+		return "", err
+	}
+
 	defer os.RemoveAll(segmentsDir)
-
-	bufferedWriter := bufio.NewWriter(f)
-	defer bufferedWriter.Flush()
-
-	type result struct {
-		Index int    // 记录解密的顺序
-		Data  []byte // 解密后的数据
-		Err   error  // 解密过程中的错误
-	}
-
-	// 通道用于接收解密后的数据
-	results := make(chan result, 3)
-	var wg sync.WaitGroup
-
-	// 异步解密
-	wg.Add(len(segments))
-	for i, segment := range segments {
-		go func(i int, seg *Segment) {
-			defer wg.Done()
-			d, err := hlsDl.decrypt(seg)
-			if err != nil {
-				results <- result{Index: i, Err: err}
-				return
-			}
-			results <- result{Index: i, Data: d, Err: nil}
-			// 删除已解密的段
-			os.RemoveAll(seg.Path)
-		}(i, segment)
-	}
-
-	// 等待解密完成
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// 使用一个切片缓存数据以保证顺序
-	dataCache := make([][]byte, len(segments))
-	for res := range results {
-		if res.Err != nil {
-			return "", res.Err // 返回第一个遇到的错误
+	for _, segment := range segments {
+		d, err := hlsDl.decrypt(segment, key, iv)
+		if err != nil {
+			return "", err
 		}
-		dataCache[res.Index] = res.Data
-	}
-
-	// 按顺序写入
-	for _, data := range dataCache {
-		if _, err := bufferedWriter.Write(data); err != nil {
+		if _, err := f.Write(d); err != nil {
+			return "", err
+		}
+		if err := os.RemoveAll(segment.Path); err != nil {
 			return "", err
 		}
 	}
 
 	return outFile, nil
 }
-
-//func (hlsDl *HlsDl) join(segmentsDir string, segments []*Segment) (string, error) {
-//	log.Println("Joining segments")
-//
-//	outFile := filepath.Join(hlsDl.dir, hlsDl.filename)
-//
-//	f, err := os.Create(outFile)
-//	if err != nil {
-//		return "", err
-//	}
-//	defer f.Close()
-//
-//	sort.Slice(segments, func(i, j int) bool {
-//		return segments[i].SeqId < segments[j].SeqId
-//	})
-//
-//	defer os.RemoveAll(segmentsDir)
-//	for _, segment := range segments {
-//		d, err := hlsDl.decrypt(segment)
-//		if err != nil {
-//			return "", err
-//		}
-//		if _, err := f.Write(d); err != nil {
-//			return "", err
-//		}
-//		if err := os.RemoveAll(segment.Path); err != nil {
-//			return "", err
-//		}
-//	}
-//
-//	return outFile, nil
-//}
 
 func (hlsDl *HlsDl) Download() (string, error) {
 	segs, err := parseHlsSegments(hlsDl.hlsURL, hlsDl.headers)
@@ -336,7 +270,7 @@ func (hlsDl *HlsDl) Download() (string, error) {
 }
 
 // Decrypt descryps a segment
-func (hlsDl *HlsDl) decrypt(segment *Segment) ([]byte, error) {
+func (hlsDl *HlsDl) decrypt(segment *Segment, key, iv []byte) ([]byte, error) {
 	file, err := os.Open(segment.Path)
 	if err != nil {
 		return nil, err
@@ -347,10 +281,6 @@ func (hlsDl *HlsDl) decrypt(segment *Segment) ([]byte, error) {
 		return nil, err
 	}
 	if segment.Key != nil {
-		key, iv, err := hlsDl.getKey(segment)
-		if err != nil {
-			return nil, err
-		}
 		data, err = decryptAES128(data, key, iv)
 		if err != nil {
 			return nil, err
@@ -366,6 +296,38 @@ func (hlsDl *HlsDl) decrypt(segment *Segment) ([]byte, error) {
 
 	return data, nil
 }
+
+//// Decrypt descryps a segment
+//func (hlsDl *HlsDl) decrypt(segment *Segment) ([]byte, error) {
+//	file, err := os.Open(segment.Path)
+//	if err != nil {
+//		return nil, err
+//	}
+//	defer file.Close()
+//	data, err := io.ReadAll(file)
+//	if err != nil {
+//		return nil, err
+//	}
+//	if segment.Key != nil {
+//		key, iv, err := hlsDl.getKey(segment)
+//		if err != nil {
+//			return nil, err
+//		}
+//		data, err = decryptAES128(data, key, iv)
+//		if err != nil {
+//			return nil, err
+//		}
+//	}
+//
+//	for j := 0; j < len(data); j++ {
+//		if data[j] == syncByte {
+//			data = data[j:]
+//			break
+//		}
+//	}
+//
+//	return data, nil
+//}
 
 func (hlsDl *HlsDl) getKey(segment *Segment) (key []byte, iv []byte, err error) {
 	res, err := hlsDl.client.SetHeaders(hlsDl.headers).R().Get(segment.Key.URI)
